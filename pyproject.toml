@@ -3,7 +3,9 @@ name = "shark-tank"
 version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
+    "fastapi>=0.131.0",
     "livekit-agents[google]~=1.4",
     "livekit-plugins-noise-cancellation~=0.2",
     "python-dotenv>=1.2.1",
+    "uvicorn>=0.41.0",
 ]

@@ -9,9 +9,9 @@ from livekit.plugins import (
 
 load_dotenv(".env")
 room_name = "shark-arena"
-shark_a = "shark-a"
-shark_b = "shark-b"
-shark_c = "shark-c"
+shark_a = "Mark"
+shark_b = "Kevin"
+shark_c = "Lori"
 
 class Shark(Agent):
     def __init__(self) -> None:
@@ -19,13 +19,13 @@ class Shark(Agent):
 
 server = AgentServer()
 
-@server.rtc_session(agent_name="Shark")
+@server.rtc_session(agent_name="Mark")
 async def shark_session(ctx: agents.JobContext):
     session = AgentSession(
         llm=google.realtime.RealtimeModel(
             voice="Puck",
             temperature=0.8,
-            instructions="You are a helpful assistant",
+            instructions=f"You are {ctx.agent_name} from Shark Tank. You are here to invest. Follow the personality of {ctx.agent_name}.",
         ),
     )
     print(f"Room name: {ctx.room.name}")
