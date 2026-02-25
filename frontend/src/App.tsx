@@ -8,8 +8,10 @@ import {
 } from '@livekit/components-react';
 import { SharkCard } from './components/SharkCard';
 import { Trophy, Send, Users } from 'lucide-react';
-
-const BACKEND_URL = 'http://localhost:8000';
+const ENV = "PRODUCTION"
+const BACKEND_URL = ENV === "PRODUCTION"
+    ? 'https://ai-shark-tank.onrender.com'
+    : 'http://localhost:8000';
 
 export default function App() {
     const [token, setToken] = useState<string | null>(null);
