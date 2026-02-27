@@ -26,7 +26,7 @@ export default function App() {
         setIsJoining(true);
 
         try {
-            const resp = await fetch(`${BACKEND_URL}/token`, {
+            const resp = await fetch(`${BACKEND_URL}/session-token`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -41,6 +41,9 @@ export default function App() {
             // Align with backend change: using participant_token
             setToken(data.participant_token);
             setServerUrl(data.server_url);
+            if (data.room_name) {
+                setRoomName(data.room_name);
+            }
         } catch (err) {
             console.error('Failed to get token:', err);
             alert('Failed to connect to backend server');
