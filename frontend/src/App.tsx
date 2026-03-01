@@ -1,10 +1,10 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import {
     LiveKitRoom,
     RoomAudioRenderer,
     ControlBar,
     useParticipants,
-    ConnectionState,
+    useRoomContext,
 } from '@livekit/components-react';
 import { SharkCard } from './components/SharkCard';
 import { Trophy, Send, Users } from 'lucide-react';
@@ -16,26 +16,27 @@ const BACKEND_URL = ENV === "PRODUCTION"
 export default function App() {
     const [token, setToken] = useState<string | null>(null);
     const [serverUrl, setServerUrl] = useState<string | null>(null);
-    const [roomName, setRoomName] = useState('shark-arena');
+    const [roomName, setRoomName] = useState('');
     const [identity, setIdentity] = useState('');
     const [isJoining, setIsJoining] = useState(false);
 
     const handleJoin = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!roomName || !identity) return;
+        if (!identity) return;
         setIsJoining(true);
 
         try {
+            const payload: Record<string, unknown> = {
+                participant_identity: identity,
+                participant_name: identity,
+            };
+            if (roomName.trim()) {
+                payload.room_config = { name: roomName.trim() };
+            }
             const resp = await fetch(`${BACKEND_URL}/session-token`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    participant_identity: identity,
-                    participant_name: identity,
-                    room_config: {
-                        name: roomName
-                    }
-                }),
+                body: JSON.stringify(payload),
             });
             const data = await resp.json();
             // Align with backend change: using participant_token
@@ -91,8 +92,8 @@ export default function App() {
                                 type="text"
                                 value={roomName}
                                 onChange={(e) => setRoomName(e.target.value)}
+                                placeholder="Auto: shark-arena-{your-name}"
                                 className="glass-input"
-                                required
                             />
                         </div>
                         <button
@@ -127,6 +128,7 @@ export default function App() {
 
 function RoomContent({ roomName }: { roomName: string }) {
     const participants = useParticipants();
+    const room = useRoomContext();
     // Generalized detection: Show all remote participants as "Sharks"
     const sharks = participants.filter(p => !p.isLocal);
 
@@ -152,7 +154,9 @@ function RoomContent({ roomName }: { roomName: string }) {
                         </div>
                     </div>
                     <button
-                        onClick={() => window.location.reload()}
+                        onClick={() => {
+                            void room.disconnect();
+                        }}
                         className="bg-white/5 hover:bg-red-500/10 text-white/60 hover:text-red-500 px-5 py-3 rounded-2xl border border-white/10 transition-all font-black text-xs uppercase tracking-[0.1em]"
                     >
                         Abandon Pitch
