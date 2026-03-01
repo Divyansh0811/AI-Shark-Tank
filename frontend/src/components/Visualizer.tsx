@@ -1,21 +1,22 @@
 import React, { useEffect, useState } from 'react';
-import { useTrackTranscription, useParticipantTracks } from '@livekit/components-react';
-import { Track } from 'livekit-client';
 
 interface VisualizerProps {
-    participantIdentity: string;
+    isSpeaking: boolean;
 }
 
-export const Visualizer: React.FC<VisualizerProps> = ({ participantIdentity }) => {
+export const Visualizer: React.FC<VisualizerProps> = ({ isSpeaking }) => {
     const [bars, setBars] = useState<number[]>(new Array(10).fill(4));
 
     useEffect(() => {
+        if (!isSpeaking) {
+            setBars(new Array(10).fill(4));
+            return;
+        }
         const interval = setInterval(() => {
-            // Simulate visualizer for now if not speaking, otherwise we'd hook into audio frequency data
-            setBars(prev => prev.map(() => Math.max(4, Math.random() * 40)));
+            setBars(prev => prev.map(() => Math.max(6, Math.random() * 28)));
         }, 100);
         return () => clearInterval(interval);
-    }, []);
+    }, [isSpeaking]);
 
     return (
         <div className="visualizer-container">

@@ -8,7 +8,7 @@ import {
 } from '@livekit/components-react';
 import { SharkCard } from './components/SharkCard';
 import { Trophy, Send, Users } from 'lucide-react';
-const ENV = "PRODUCTION"
+const ENV = import.meta.env.MODE === 'production' ? "PRODUCTION" : "DEV";
 const BACKEND_URL = ENV === "PRODUCTION"
     ? 'https://ai-shark-tank.onrender.com'
     : 'http://localhost:8000';
@@ -131,14 +131,14 @@ function RoomContent({ roomName }: { roomName: string }) {
     const sharks = participants.filter(p => !p.isLocal);
 
     return (
-        <div className="grid grid-rows-[auto_1fr_auto] h-screen w-full overflow-hidden max-w-screen-2xl mx-auto xl:p-8 p-4 gap-6">
-            <header className="arena-header glass-panel px-10 py-8 flex justify-between items-center bg-black/40 backdrop-blur-xl border-white/10 rounded-[32px]">
+        <div className="grid grid-rows-[auto_1fr_auto] h-screen w-full overflow-y-auto max-w-screen-2xl mx-auto xl:p-6 p-3 gap-4">
+            <header className="arena-header glass-panel px-5 md:px-8 py-5 md:py-6 flex justify-between items-center bg-black/40 backdrop-blur-xl border-white/10 rounded-[24px]">
                 <div className="text-left">
                     <div className="flex items-center gap-3 mb-2">
                         <div className="w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse shadow-[0_0_10px_#ef4444]" />
                         <span className="text-[10px] font-black text-red-500 uppercase tracking-[0.2em]">Live Session</span>
                     </div>
-                    <h2 className="text-4xl font-black text-white tracking-tighter leading-none">
+                    <h2 className="text-2xl md:text-3xl font-black text-white tracking-tighter leading-none">
                         {roomName.toUpperCase()}
                     </h2>
                 </div>
@@ -153,14 +153,14 @@ function RoomContent({ roomName }: { roomName: string }) {
                     </div>
                     <button
                         onClick={() => window.location.reload()}
-                        className="bg-white/5 hover:bg-red-500/10 text-white/60 hover:text-red-500 px-8 py-4 rounded-2xl border border-white/10 transition-all font-black text-xs uppercase tracking-[0.1em]"
+                        className="bg-white/5 hover:bg-red-500/10 text-white/60 hover:text-red-500 px-5 py-3 rounded-2xl border border-white/10 transition-all font-black text-xs uppercase tracking-[0.1em]"
                     >
                         Abandon Pitch
                     </button>
                 </div>
             </header>
 
-            <div className={`flex-1 grid gap-10 items-center transition-all duration-700 ${sharks.length === 1 ? 'grid-cols-1 max-w-2xl mx-auto' :
+            <div className={`flex-1 grid gap-4 md:gap-6 content-start transition-all duration-700 ${sharks.length === 1 ? 'grid-cols-1 max-w-xl mx-auto' :
                 sharks.length === 2 ? 'grid-cols-1 md:grid-cols-2 max-w-5xl mx-auto' :
                     'grid-cols-1 md:grid-cols-3'
                 }`}>
@@ -183,7 +183,7 @@ function RoomContent({ roomName }: { roomName: string }) {
                 )}
             </div>
 
-            <div className="flex items-center justify-center py-6 px-10 glass-panel bg-black/60 backdrop-blur-3xl border-white/10 rounded-[32px] shadow-2xl relative z-50">
+            <div className="flex items-center justify-center py-4 px-5 md:px-8 glass-panel bg-black/60 backdrop-blur-3xl border-white/10 rounded-[24px] shadow-2xl relative z-50">
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1.5 bg-blue-600 rounded-full shadow-xl shadow-blue-500/30 border border-white/20">
                     <span className="text-[10px] font-black text-white uppercase tracking-[0.2em]">Pitch Console</span>
                 </div>
