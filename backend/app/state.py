@@ -24,6 +24,7 @@ class RoomTurnState:
     last_handled_turn_key: str
     awaiting_reply_from: Optional[str]
     greeted: bool
+    cleanup_started: bool
     orchestrator_wired: bool
     event_bus: EventBus
     lock: asyncio.Lock

@@ -21,8 +21,24 @@ def resolve_room_name(request: TokenRequest) -> str:
     ):
         effective_room_name = request.room_config["name"]
     if not effective_room_name:
-        raise ValueError("room_name is required")
+        base_name = request.participant_name or request.participant_identity or "anonymous"
+        effective_room_name = f"shark-arena-{_slugify_room_component(base_name)}"
     return effective_room_name
+
+
+def _slugify_room_component(value: str) -> str:
+    slug_chars = []
+    prev_dash = False
+    for ch in value.lower():
+        if ch.isalnum():
+            slug_chars.append(ch)
+            prev_dash = False
+            continue
+        if not prev_dash:
+            slug_chars.append("-")
+            prev_dash = True
+    slug = "".join(slug_chars).strip("-")
+    return slug or "anonymous"
 
 
 def build_participant_token(

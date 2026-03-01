@@ -5,6 +5,7 @@ import random
 from typing import List
 
 from fastapi import HTTPException
+from livekit import api as lk_api
 from livekit import rtc
 from livekit.agents import Agent, AgentSession, room_io
 from livekit.plugins import google
@@ -51,6 +52,7 @@ def ensure_turn_state(room_name: str, agent_names: List[str]) -> RoomTurnState:
         last_handled_turn_key="",
         awaiting_reply_from=None,
         greeted=False,
+        cleanup_started=False,
         orchestrator_wired=False,
         event_bus=EventBus(),
         lock=asyncio.Lock(),
@@ -88,6 +90,52 @@ def _pick_next_listener(state: RoomTurnState, current_agent: str) -> None:
         return
     next_name = random.choice(candidates)
     state.next_agent_idx = state.agent_order.index(next_name)
+
+
+async def _cleanup_room(
+    *,
+    room_name: str,
+    state: RoomTurnState,
+    server_url: str,
+    api_key: str,
+    api_secret: str,
+    trigger: str,
+) -> None:
+    async with state.lock:
+        if state.cleanup_started:
+            return
+        state.cleanup_started = True
+
+    logger.info("room-cleanup start room=%s trigger=%s", room_name, trigger)
+
+    room_keys = [key for key in ACTIVE_AGENT_CONNECTIONS if key[0] == room_name]
+    for key in room_keys:
+        conn = ACTIVE_AGENT_CONNECTIONS.get(key)
+        if not conn:
+            continue
+        try:
+            if conn.room.isconnected():
+                await conn.room.disconnect()
+        except Exception as exc:
+            logger.warning(
+                "room-cleanup disconnect-failed room=%s agent=%s error=%s",
+                room_name,
+                conn.agent_name,
+                exc,
+            )
+        finally:
+            ACTIVE_AGENT_CONNECTIONS.pop(key, None)
+
+    ROOM_TURN_STATES.pop(room_name, None)
+
+    lkapi = lk_api.LiveKitAPI(url=server_url, api_key=api_key, api_secret=api_secret)
+    try:
+        await lkapi.room.delete_room(lk_api.DeleteRoomRequest(room=room_name))
+        logger.info("room-cleanup deleted room=%s", room_name)
+    except Exception as exc:
+        logger.warning("room-cleanup delete-failed room=%s error=%s", room_name, exc)
+    finally:
+        await lkapi.aclose()
 
 
 async def handle_user_turn(
@@ -357,6 +405,23 @@ async def join_agents_manually(
                     agent_name=agent_name,
                 ),
             )
+
+            if founder_identity:
+                def _on_participant_disconnected(participant) -> None:
+                    if getattr(participant, "identity", None) != founder_identity:
+                        return
+                    asyncio.create_task(
+                        _cleanup_room(
+                            room_name=room_name,
+                            state=state,
+                            server_url=server_url,
+                            api_key=api_key,
+                            api_secret=api_secret,
+                            trigger=f"founder-left:{founder_identity}",
+                        )
+                    )
+
+                room.on("participant_disconnected", _on_participant_disconnected)
 
             session = AgentSession(
                 llm=google.realtime.RealtimeModel(

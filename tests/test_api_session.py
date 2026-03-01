@@ -163,6 +163,7 @@ def test_handle_user_turn_round_robin_and_dedupe():
         last_handled_turn_key="",
         awaiting_reply_from=None,
         greeted=False,
+        cleanup_started=False,
         orchestrator_wired=True,
         event_bus=EventBus(),
         lock=agent_service.asyncio.Lock(),
