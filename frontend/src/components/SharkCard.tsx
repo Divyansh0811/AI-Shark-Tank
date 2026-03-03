@@ -1,6 +1,5 @@
 import React from 'react';
-import { useParticipantInfo, useParticipantTracks } from '@livekit/components-react';
-import { Participant, Track } from 'livekit-client';
+import { Participant } from 'livekit-client';
 import { Visualizer } from './Visualizer';
 import { User } from 'lucide-react';
 
@@ -11,14 +10,17 @@ interface SharkCardProps {
 export const SharkCard: React.FC<SharkCardProps> = ({ participant }) => {
     const { identity, metadata, isSpeaking } = participant;
 
-    // Assign specific classes for special sharks
+    // Backend sets "shark.active" = "true" on the currently speaking shark's room participant
+    const isOnTurn = participant.attributes?.["shark.active"] === "true";
+
     const sharkClass = identity.toLowerCase() === "mark" ? "shark-mark" :
         identity.toLowerCase() === "lori" ? "shark-lori" :
-            identity.toLowerCase() === "kevin" ? "shark-kevin" : "";
+        identity.toLowerCase() === "kevin" ? "shark-kevin" : "";
 
     return (
-        <div className={`shark-card ${sharkClass} ${isSpeaking ? 'speaking' : ''}`}>
+        <div className={`shark-card ${sharkClass} ${isSpeaking ? 'speaking' : ''} ${isOnTurn ? 'on-turn' : 'off-turn'}`}>
             <div className="speaking-halo" />
+
             <div className="flex flex-col items-center text-center mb-8">
                 <div className="relative w-40 h-40 mb-8 p-1 rounded-full bg-gradient-to-tr from-white/20 to-transparent">
                     <div className="absolute inset-0 bg-blue-500/20 blur-2xl rounded-full animate-pulse z-0" />
@@ -26,8 +28,10 @@ export const SharkCard: React.FC<SharkCardProps> = ({ participant }) => {
                         <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent pointer-events-none" />
                         <User className="w-20 h-20 text-white/50 drop-shadow-glow" />
                     </div>
-                    {/* Status dot */}
-                    <div className="absolute bottom-2 right-2 w-7 h-7 bg-green-500 border-4 border-[#010409] rounded-full z-20 shadow-lg" />
+                    {/* Active indicator dot */}
+                    <div className={`absolute bottom-2 right-2 w-7 h-7 border-4 border-[#010409] rounded-full z-20 shadow-lg
+                        ${isOnTurn ? 'bg-green-500' : 'bg-gray-600'}`}
+                    />
                 </div>
 
                 <div className="relative z-10">
@@ -60,8 +64,11 @@ export const SharkCard: React.FC<SharkCardProps> = ({ participant }) => {
                 <div className="h-8 w-px bg-white/10" />
                 <div className="flex flex-col items-end">
                     <span className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Status</span>
-                    <span className={`text-sm font-bold ${isSpeaking ? 'text-green-400' : 'text-blue-400'}`}>
-                        {isSpeaking ? 'SPEAKING' : 'LISTENING'}
+                    <span className={`text-sm font-bold
+                        ${isSpeaking ? 'text-green-400' :
+                          isOnTurn  ? 'text-blue-400' :
+                                      'text-gray-600'}`}>
+                        {isSpeaking ? 'SPEAKING' : isOnTurn ? 'LISTENING' : 'WAITING'}
                     </span>
                 </div>
             </div>

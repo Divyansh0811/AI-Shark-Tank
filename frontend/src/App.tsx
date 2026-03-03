@@ -1,14 +1,14 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import {
     LiveKitRoom,
     RoomAudioRenderer,
     ControlBar,
     useParticipants,
-    ConnectionState,
 } from '@livekit/components-react';
 import { SharkCard } from './components/SharkCard';
 import { Trophy, Send, Users } from 'lucide-react';
-const ENV = "PRODUCTION"
+
+const ENV = "DEV"
 const BACKEND_URL = ENV === "PRODUCTION"
     ? 'https://ai-shark-tank.onrender.com'
     : 'http://localhost:8000';
@@ -32,18 +32,13 @@ export default function App() {
                 body: JSON.stringify({
                     participant_identity: identity,
                     participant_name: identity,
-                    room_config: {
-                        name: roomName
-                    }
+                    room_config: { name: roomName },
                 }),
             });
             const data = await resp.json();
-            // Align with backend change: using participant_token
             setToken(data.participant_token);
             setServerUrl(data.server_url);
-            if (data.room_name) {
-                setRoomName(data.room_name);
-            }
+            if (data.room_name) setRoomName(data.room_name);
         } catch (err) {
             console.error('Failed to get token:', err);
             alert('Failed to connect to backend server');
@@ -117,7 +112,7 @@ export default function App() {
             audio={true}
             video={false}
             onDisconnected={() => setToken(null)}
-            style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}
+            style={{ height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
         >
             <RoomContent roomName={roomName} />
             <RoomAudioRenderer />
@@ -127,74 +122,94 @@ export default function App() {
 
 function RoomContent({ roomName }: { roomName: string }) {
     const participants = useParticipants();
-    // Generalized detection: Show all remote participants as "Sharks"
     const sharks = participants.filter(p => !p.isLocal);
 
+    // Active shark is determined by the participant attribute set by the backend
+    const activeShark = sharks.find(p => p.attributes?.["shark.active"] === "true");
+
     return (
-        <div className="grid grid-rows-[auto_1fr_auto] h-screen w-full overflow-hidden max-w-screen-2xl mx-auto xl:p-8 p-4 gap-6">
-            <header className="arena-header glass-panel px-10 py-8 flex justify-between items-center bg-black/40 backdrop-blur-xl border-white/10 rounded-[32px]">
+        /*
+         * Flex-column layout that fills the LiveKitRoom's 100dvh parent.
+         * flex-none on header + footer guarantees they are always visible;
+         * flex-1 min-h-0 on the card area lets it absorb remaining space
+         * and scroll internally when cards don't fit.
+         */
+        <div className="flex flex-col w-full h-full overflow-hidden max-w-screen-2xl mx-auto xl:px-8 xl:py-6 px-4 py-4 gap-4">
+
+            {/* Header — never compressed */}
+            <header className="flex-none arena-header glass-panel px-8 py-5 flex justify-between items-center bg-black/40 backdrop-blur-xl border-white/10 rounded-[28px]">
                 <div className="text-left">
-                    <div className="flex items-center gap-3 mb-2">
-                        <div className="w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse shadow-[0_0_10px_#ef4444]" />
+                    <div className="flex items-center gap-3 mb-1">
+                        <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse shadow-[0_0_10px_#ef4444]" />
                         <span className="text-[10px] font-black text-red-500 uppercase tracking-[0.2em]">Live Session</span>
                     </div>
-                    <h2 className="text-4xl font-black text-white tracking-tighter leading-none">
+                    <h2 className="text-3xl font-black text-white tracking-tighter leading-none">
                         {roomName.toUpperCase()}
                     </h2>
                 </div>
 
-                <div className="flex gap-8 items-center">
+                <div className="flex gap-6 items-center">
+                    {activeShark && (
+                        <div className="flex flex-col items-end">
+                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-0.5">On Deck</span>
+                            <span className="text-base font-black text-blue-400 uppercase tracking-wide">
+                                {activeShark.name || activeShark.identity}
+                            </span>
+                        </div>
+                    )}
                     <div className="flex flex-col items-end">
-                        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Board of Investors</span>
-                        <div className="flex items-center gap-2">
-                            <Users className="w-5 h-5 text-blue-400" />
-                            <span className="text-2xl font-black text-white">{sharks.length}</span>
+                        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-0.5">Investors</span>
+                        <div className="flex items-center gap-1.5">
+                            <Users className="w-4 h-4 text-blue-400" />
+                            <span className="text-xl font-black text-white">{sharks.length}</span>
                         </div>
                     </div>
                     <button
                         onClick={() => window.location.reload()}
-                        className="bg-white/5 hover:bg-red-500/10 text-white/60 hover:text-red-500 px-8 py-4 rounded-2xl border border-white/10 transition-all font-black text-xs uppercase tracking-[0.1em]"
+                        className="bg-white/5 hover:bg-red-500/10 text-white/60 hover:text-red-500 px-6 py-3 rounded-xl border border-white/10 transition-colors font-black text-xs uppercase tracking-[0.1em]"
                     >
-                        Abandon Pitch
+                        Exit
                     </button>
                 </div>
             </header>
 
-            <div className={`flex-1 grid gap-10 items-center transition-all duration-700 ${sharks.length === 1 ? 'grid-cols-1 max-w-2xl mx-auto' :
-                sharks.length === 2 ? 'grid-cols-1 md:grid-cols-2 max-w-5xl mx-auto' :
-                    'grid-cols-1 md:grid-cols-3'
-                }`}>
-                {sharks.map((shark) => (
-                    <SharkCard key={shark.sid} participant={shark} />
-                ))}
+            {/* Shark cards — fills remaining space, scrolls if needed */}
+            <div className="flex-1 min-h-0 overflow-y-auto">
+                <div className={`h-full grid gap-6 content-center
+                    ${sharks.length === 1 ? 'grid-cols-1 max-w-xl mx-auto' :
+                    sharks.length === 2 ? 'grid-cols-1 md:grid-cols-2 max-w-4xl mx-auto' :
+                    'grid-cols-1 md:grid-cols-3'}`}
+                >
+                    {sharks.map((shark) => (
+                        <SharkCard key={shark.sid} participant={shark} />
+                    ))}
 
-                {sharks.length === 0 && (
-                    <div className="col-span-full flex items-center justify-center p-32 glass-panel border-dashed bg-white/[0.01] relative overflow-hidden">
-                        <div className="absolute inset-0 bg-blue-500/5 animate-pulse" />
-                        <div className="text-center relative z-10">
-                            <div className="relative w-24 h-24 mx-auto mb-8">
-                                <div className="absolute inset-0 border-4 border-blue-500/20 rounded-full" />
-                                <div className="absolute inset-0 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                    {sharks.length === 0 && (
+                        <div className="col-span-full flex items-center justify-center p-20 glass-panel border-dashed bg-white/[0.01] relative overflow-hidden">
+                            <div className="absolute inset-0 bg-blue-500/5 animate-pulse" />
+                            <div className="text-center relative z-10">
+                                <div className="relative w-20 h-20 mx-auto mb-6">
+                                    <div className="absolute inset-0 border-4 border-blue-500/20 rounded-full" />
+                                    <div className="absolute inset-0 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                                </div>
+                                <h3 className="text-xl font-black text-white mb-2 tracking-tight">WAITING FOR SHARKS</h3>
+                                <p className="text-gray-500 font-bold uppercase tracking-widest text-xs">Analyzing your pitch...</p>
                             </div>
-                            <h3 className="text-2xl font-black text-white mb-3 tracking-tight">WAITING FOR SHARKS</h3>
-                            <p className="text-gray-500 font-bold uppercase tracking-widest text-xs">Analyzing pitch deck and market potential...</p>
                         </div>
-                    </div>
-                )}
+                    )}
+                </div>
             </div>
 
-            <div className="flex items-center justify-center py-6 px-10 glass-panel bg-black/60 backdrop-blur-3xl border-white/10 rounded-[32px] shadow-2xl relative z-50">
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1.5 bg-blue-600 rounded-full shadow-xl shadow-blue-500/30 border border-white/20">
+            {/* Control bar — never compressed, always visible */}
+            <div className="flex-none flex items-center justify-center py-4 px-8 glass-panel bg-black/60 backdrop-blur-3xl border-white/10 rounded-[28px] shadow-2xl relative">
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 bg-blue-600 rounded-full shadow-xl shadow-blue-500/30 border border-white/20">
                     <span className="text-[10px] font-black text-white uppercase tracking-[0.2em]">Pitch Console</span>
                 </div>
-
-                <div className="flex items-center justify-center w-full">
-                    <ControlBar
-                        variation="minimal"
-                        controls={{ microphone: true, screenShare: false, camera: false, chat: false }}
-                        className="bg-transparent border-none p-0 flex gap-8 scale-110"
-                    />
-                </div>
+                <ControlBar
+                    variation="minimal"
+                    controls={{ microphone: true, screenShare: false, camera: false, chat: false }}
+                    className="bg-transparent border-none p-0 flex gap-6"
+                />
             </div>
         </div>
     );
