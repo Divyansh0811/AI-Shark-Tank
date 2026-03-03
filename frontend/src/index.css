@@ -74,9 +74,14 @@ h3,
 
 .shark-card {
   position: relative;
-  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  /* Only animate properties that change on hover — not 'all'.
+     'transition: all' was causing the card to re-animate (shake) every time
+     isSpeaking or isOnTurn changed, which happens many times per second. */
+  transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.5s cubic-bezier(0.16, 1, 0.3, 1),
+              background-color 0.5s cubic-bezier(0.16, 1, 0.3, 1),
+              opacity 0.4s ease;
   padding: 48px;
-  /* High-end breathing room */
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%);
   border: 1px solid var(--glass-border);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
@@ -84,6 +89,18 @@ h3,
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  /* Promote to its own GPU layer to prevent layout-triggered repaints */
+  will-change: transform;
+}
+
+/* Active shark: full visibility */
+.shark-card.on-turn {
+  opacity: 1;
+}
+
+/* Waiting sharks: dimmed but still visible */
+.shark-card.off-turn {
+  opacity: 0.55;
 }
 
 .shark-card::after {
@@ -100,11 +117,15 @@ h3,
   pointer-events: none;
 }
 
-.shark-card:hover {
-  transform: translateY(-12px) scale(1.02);
+.shark-card.on-turn:hover {
+  transform: translateY(-8px) scale(1.01);
   background: rgba(255, 255, 255, 0.1);
   border-color: var(--glass-border-bright);
   box-shadow: 0 30px 60px rgba(0, 0, 0, 0.5);
+}
+
+.shark-card.off-turn:hover {
+  opacity: 0.75;
 }
 
 /* Speaking Halo Effect - Amplified */
