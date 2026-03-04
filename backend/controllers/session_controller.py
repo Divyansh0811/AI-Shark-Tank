@@ -64,6 +64,7 @@ async def get_session_token(request: SessionTokenRequest) -> dict:
 
         state = TURN_STATES.get(room_name)
         current_shark = state.current_shark if state else requested_agents[0]
+        turn_order = state.turn_order if state else requested_agents
 
         return {
             "participant_token": participant_token,
@@ -74,7 +75,7 @@ async def get_session_token(request: SessionTokenRequest) -> dict:
             "agents_connected": agents_connected,
             "agents_dispatched": agents_connected,
             "current_shark": current_shark,
-            "turn_order": requested_agents,
+            "turn_order": turn_order,
         }
     except HTTPException:
         raise

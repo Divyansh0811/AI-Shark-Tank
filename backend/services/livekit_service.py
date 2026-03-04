@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import random
 from dataclasses import dataclass
 from typing import Dict, List
 
@@ -83,11 +84,15 @@ async def join_agents_manually(
             )
             print(f"[Room] {agent_name} connected to {room_name}")
 
+        # Randomize turn order per room so starting shark isn't fixed.
+        turn_order = agent_names.copy()
+        random.shuffle(turn_order)
+
         # ── 2. Build the turn state BEFORE starting the first session ──
         #    (the session needs a reference to state for the turn-complete callback)
         state = SharkTurnState(
             connections=connections,
-            turn_order=agent_names,
+            turn_order=turn_order,
             current_turn_index=0,
             active_session=None,
             room_name=room_name,
@@ -97,7 +102,10 @@ async def join_agents_manually(
 
         # ── 3. Start only the first shark's session ──
         state.active_session = await start_shark_session(
-            connections[agent_names[0]], google_api_key, entrepreneur_identity, state
+            connections[state.current_shark],
+            google_api_key,
+            entrepreneur_identity,
+            state,
         )
 
     return sorted(agent_names)

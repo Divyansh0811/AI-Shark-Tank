@@ -137,6 +137,46 @@ def test_token_with_agents_is_idempotent_when_room_exists(monkeypatch):
     assert fake_lkapi.room.created_rooms == []
 
 
+def test_session_token_reflects_runtime_turn_order_from_state(monkeypatch):
+    monkeypatch.setenv("LIVEKIT_API_KEY", "key")
+    monkeypatch.setenv("LIVEKIT_API_SECRET", "secret")
+    monkeypatch.setenv("LIVEKIT_URL", "wss://example.livekit.cloud")
+
+    fake_lkapi = FakeLiveKitAPI()
+    monkeypatch.setattr(
+        "backend.controllers.session_controller.api.LiveKitAPI",
+        lambda *a, **kw: fake_lkapi,
+    )
+
+    async def fake_join(**kwargs):
+        custom_order = ["Lori", "Mark", "Kevin"]
+        turn_service.TURN_STATES[kwargs["room_name"]] = turn_service.SharkTurnState(
+            connections={},
+            turn_order=custom_order,
+            current_turn_index=0,
+            active_session=None,
+            room_name=kwargs["room_name"],
+            entrepreneur_identity=kwargs["entrepreneur_identity"],
+        )
+        return sorted(kwargs["agent_names"])
+
+    monkeypatch.setattr(livekit_service, "join_agents_manually", fake_join)
+    monkeypatch.setattr(
+        "backend.controllers.session_controller.join_agents_manually", fake_join
+    )
+
+    client = TestClient(backend_api.app)
+    resp = client.post(
+        "/session-token",
+        json={"participant_identity": "founder-4", "room_name": "arena-random"},
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["current_shark"] == "Lori"
+    assert data["turn_order"] == ["Lori", "Mark", "Kevin"]
+
+
 def test_token_with_agents_requires_credentials(monkeypatch):
     monkeypatch.delenv("LIVEKIT_API_KEY", raising=False)
     monkeypatch.delenv("LIVEKIT_API_SECRET", raising=False)
