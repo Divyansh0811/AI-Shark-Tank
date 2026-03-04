@@ -12,7 +12,7 @@ const ENV = "PRODUCTION"
 const BACKEND_URL = ENV === "PRODUCTION"
     ? 'https://ai-shark-tank.onrender.com'
     : 'http://localhost:8000';
-const ACCESS_PASSWORD = 'tank@321';
+const ACCESS_PASSWORD = (import.meta.env.VITE_ACCESS_PASSWORD ?? '').trim();
 
 export default function App() {
     const [token, setToken] = useState<string | null>(null);
@@ -28,6 +28,11 @@ export default function App() {
 
         if (!password) {
             alert('Please enter the access password.');
+            return;
+        }
+
+        if (!ACCESS_PASSWORD) {
+            alert('Access is not configured. Please set VITE_ACCESS_PASSWORD.');
             return;
         }
 

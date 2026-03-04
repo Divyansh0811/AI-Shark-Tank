@@ -73,6 +73,12 @@ uv run uvicorn backend.api:app --reload --port 8000
 
 ### 4) Run frontend
 
+Create `frontend/.env.local`:
+
+```env
+VITE_ACCESS_PASSWORD=your-access-password
+```
+
 ```bash
 npm install --prefix frontend
 npm run dev --prefix frontend
