@@ -1,61 +1,62 @@
 # 🦈 Shark Tank AI: The Elite AI Pitch Arena
 
-Welcome to **Shark Tank AI**, a high-stakes, real-time voice AI experience where you pitch your business ideas to a panel of legendary (and notoriously tough) AI Sharks. Built with **LiveKit Agents**, this project brings the boardroom to the browser with ultra-low latency and distinct AI personalities.
+**Shark Tank AI** is a real-time voice experience where founders pitch to a rotating AI panel of Mark, Kevin, and Lori. The app uses LiveKit + Google realtime models for low-latency conversation and a turn-based panel flow.
 
 ---
 
 ## 🚀 Key Features
 
-- **The Sharks**: Pitch to Mark Cuban, Kevin O'Leary (Mr. Wonderful), and lori Greiner—each with their authentic personalities, voices, and investment criteria.
-- **Ultra-Low Latency**: Powered by LiveKit's Realtime Media transport, enabling fluid, natural conversations.
-- **Premium Interface**: A sleek, dark-mode dashboard built with React, Tailwind CSS, and Lucide-react.
-- **Automatic Dispatching**: Seamlessly joins the room as soon as you connect, thanks to LiveKit's automated agent dispatching system.
+- **Three distinct Sharks** with unique personas and voices.
+- **Turn-based panel orchestration** (one active shark session at a time, all sharks visible in room presence).
+- **Live turn progression** with automatic handoff after each shark's exchange window.
+- **Decision-oriented prompting**: sharks ask for required info, can finalize decisions, and may propose combined offers.
+- **Frontend access gate** with password prompt to reduce accidental LLM spend.
 
 ---
 
 ## 🛠 Tech Stack
 
-- **Backend**: Python with [LiveKit Agents SDK](https://docs.livekit.io/agents/), FastAPI for token generation, and `uv` for package management.
-- **Frontend**: React, Vite, Tailwind CSS, and [LiveKit Components](https://docs.livekit.io/components/react/).
-- **AI Engine**: Google Gemini Realtime Model for multi-modal, low-latency voice interaction.
+- **Backend**: FastAPI + LiveKit Agents SDK (Python), managed with `uv`.
+- **Frontend**: React + Vite + Tailwind + LiveKit Components.
+- **Model**: Google realtime model via LiveKit plugins.
 
 ---
 
-## ⚡ LiveKit Implementation Details
+## 🧱 Project Structure
 
-This project leverages several advanced LiveKit features to provide a seamless "Shark Tank" experience:
+```text
+backend/
+  api.py
+  constants.py
+  controllers/
+  routers/
+  schemas/
+    shark.py
+    turn.py
+  services/
+    shark_service.py      # SharkAgent
+    turn_service.py       # turn state + advancing turns
+    livekit_service.py    # room connections + join orchestration
+  utils/
+    shark_utils.py        # turn summaries + instruction builder
+    turn_utils.py         # room name resolution
+    livekit_utils.py      # token + room helpers
 
-### 1. Custom Token Endpoint
+frontend/
+  src/
+    App.tsx
+```
 
-Implemented a FastAPI-based token server in `backend/api.py`. It securely handles LiveKit JWT generation, allowing the frontend to connect without exposing API secrets.
+## 🏃 Getting Started
 
-### 2. Automatic Agent Dispatch
+### 1) Prerequisites
 
-We utilize LiveKit's dispatch system **without specifying an `agent_name`**. This ensures that as soon as a user enters a unique room, the Shark Agent(s) are automatically summoned to evaluate the pitch, providing a zero-friction experience.
+- Python + [`uv`](https://github.com/astral-sh/uv)
+- Node.js + npm
 
-### 3. LiveKit Cloud Deployment
+### 2) Backend env
 
-- **Deployment**: Use `lk agent create` to create an agent and `lk agent deploy` to push your agents to the cloud.
-- **Multiple Agents**: LiveKit Cloud's free tier supports 1 concurrent agent. For concurrent Mark, Kevin, and Lori presence, you can upgrade to a pro/self-hosted plan.
-- **Secrets Management**: Sensitive keys (like `GOOGLE_API_KEY`) are managed via the LiveKit CLI:
-
-  ```bash
-  lk agent update-secrets --secrets GOOGLE_API_KEY=YOUR_KEY
-  ```
-
----
-
-## 🏃‍♂️ Getting Started
-
-### Prerequisites
-
-- [LiveKit CLI](https://docs.livekit.io/home/cli/)
-- [uv](https://github.com/astral-sh/uv) (Python package manager)
-- [Node.js](https://nodejs.org/)
-
-### 1. Environment Setup
-
-Create a `.env` file in the `backend/` directory:
+Create `backend/.env`:
 
 ```env
 LIVEKIT_URL=wss://your-project.livekit.cloud
@@ -64,31 +65,29 @@ LIVEKIT_API_SECRET=your-api-secret
 GOOGLE_API_KEY=your-google-api-key
 ```
 
-### 2. Run the Backend (API + Agent)
+### 3) Run backend
 
 ```bash
-# Start the Token Server
 uv run uvicorn backend.api:app --reload --port 8000
-
-# Run an agent locally (e.g., Mark)
-uv run backend/agents/mark.py dev
 ```
 
-### 3. Run the Frontend
+### 4) Run frontend
 
 ```bash
-cd frontend
-npm install
-npm run dev
+npm install --prefix frontend
+npm run dev --prefix frontend
 ```
 
 ---
 
-## 🚢 Deployment
+## ✅ Testing / Quality
 
-The project includes a `Dockerfile` and `livekit.toml` generated for easy deployment.
+```bash
+uv run pytest
+uv run ruff format backend/ tests/
+uv run ruff check backend/ tests/
+```
 
-- **Dockerfile**: Optimized minimal container using `uv`.
-- **livekit.toml**: Tracking for your Cloud Agent IDs and subdomains.
+---
 
-Pitch your way to a deal. Good luck!
+Pitch your way to a deal. Good luck.
