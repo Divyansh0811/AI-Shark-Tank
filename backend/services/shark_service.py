@@ -12,7 +12,7 @@ from backend.utils.shark_utils import build_turn_summary
 class SharkAgent(Agent):
     """
     A shark that listens for MAX_EXCHANGES_PER_SHARK user messages then
-    generates a farewell and hands off to the next shark automatically.
+    wraps up its current turn and advances the panel automatically.
     """
 
     def __init__(
@@ -75,12 +75,14 @@ class SharkAgent(Agent):
                 asyncio.create_task(self._do_handoff())
 
     async def _do_handoff(self) -> None:
-        """Generate a farewell, compress this turn into a summary, then advance."""
+        """Wrap this turn, compress the turn summary, then advance."""
         print(f"[Turn] {self._name} wrapping up, handing off...")
         await self.session.generate_reply(
             instructions=(
-                "Wrap up your questioning with one concise final thought. "
-                "Tell the entrepreneur you're passing them to your fellow shark."
+                "Wrap up this turn in one concise response. "
+                "If you already have enough information, clearly state your decision "
+                "(deal, no deal, or conditional deal). If you still need data, ask one "
+                "final pointed question. Keep it natural and conversational."
             )
         )
         # Save full context so next shark's Agent has the raw history

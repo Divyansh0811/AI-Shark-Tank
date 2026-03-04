@@ -36,11 +36,19 @@ def build_shark_instructions(config: dict, turn_state) -> str:
     """Build system instructions with live context and compressed prior-turn summaries."""
     base = config["instructions"]
     live_notice = "You are LIVE right now on Shark Tank."
+    panel_guidance = (
+        "Collect all the information you need before making an offer decision. "
+        "Ask focused follow-up questions until you have enough data on product, "
+        "traction, unit economics, and risks. If you have enough information, "
+        "state your final decision clearly (deal, no deal, or conditional deal) "
+        "and finalize your stance. You may collaborate with other sharks and propose "
+        "a combined offer when it improves the deal."
+    )
     if not turn_state.turn_summaries:
-        return f"{live_notice} {base}"
+        return f"{live_notice} {base} {panel_guidance}"
     history = "\n\n".join(turn_state.turn_summaries)
     return (
-        f"{live_notice} {base}\n\n"
+        f"{live_notice} {base} {panel_guidance}\n\n"
         f"Pitch conversation so far (one block per shark turn):\n"
         f"---\n{history}\n---\n\n"
         f"You have been sitting on the panel listening to everything above. "
