@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from backend import api as backend_api
 from backend.constants import AGENT_CONFIGS, MAX_EXCHANGES_PER_SHARK
 from backend.services import livekit_service, shark_service, turn_service
+from backend.utils.shark_utils import build_shark_instructions
 
 
 class FakeRoomService:
@@ -221,6 +222,63 @@ def test_shark_agent_ignores_assistant_messages(monkeypatch):
 
     assert not handoff_called
     assert agent._user_msg_count == 0
+
+
+def test_shark_agent_handoff_does_not_tell_user_it_is_passing_to_next_shark(
+    monkeypatch,
+):
+    import asyncio
+
+    prompts = []
+
+    class FakeSession:
+        async def generate_reply(self, **kwargs):
+            prompts.append(kwargs.get("instructions", ""))
+
+    async def fake_handoff():
+        return None
+
+    state = turn_service.SharkTurnState(
+        connections={},
+        turn_order=["Mark", "Kevin", "Lori"],
+        current_turn_index=0,
+        active_session=None,
+        room_name="arena-handoff",
+        entrepreneur_identity="founder-z",
+    )
+    agent = shark_service.SharkAgent(
+        "Mark", "instructions", fake_handoff, turn_state=state, chat_ctx=None
+    )
+    monkeypatch.setattr(
+        agent,
+        "_get_activity_or_raise",
+        lambda: SimpleNamespace(session=FakeSession()),
+    )
+
+    asyncio.run(agent._do_handoff())
+
+    assert prompts, "Expected a handoff prompt to be generated"
+    handoff_prompt = prompts[-1]
+    assert "passing" not in handoff_prompt.lower()
+    assert "fellow shark" not in handoff_prompt.lower()
+
+
+def test_build_shark_instructions_include_decision_and_collaboration_guidance():
+    config = AGENT_CONFIGS["Mark"]
+    state = turn_service.SharkTurnState(
+        connections={},
+        turn_order=["Mark", "Kevin", "Lori"],
+        current_turn_index=0,
+        active_session=None,
+        room_name="arena-instructions",
+        entrepreneur_identity="founder-a",
+    )
+
+    built = build_shark_instructions(config, state)
+
+    assert "collect all the information" in built.lower()
+    assert "final decision" in built.lower()
+    assert "combined offer" in built.lower()
 
 
 # ── /advance-turn (manual override) ────────────────────────────────────────
