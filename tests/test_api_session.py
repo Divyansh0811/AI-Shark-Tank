@@ -3,6 +3,8 @@ from types import SimpleNamespace
 from fastapi.testclient import TestClient
 
 from backend import api as backend_api
+from backend.constants import AGENT_CONFIGS, MAX_EXCHANGES_PER_SHARK
+from backend.services import livekit_service, shark_service, turn_service
 
 
 class FakeRoomService:
@@ -30,8 +32,10 @@ class FakeLiveKitAPI:
         return None
 
 
-def _fake_turn_state(room_name, agent_names, entrepreneur_identity="founder-x", index=0):
-    return backend_api.SharkTurnState(
+def _fake_turn_state(
+    room_name, agent_names, entrepreneur_identity="founder-x", index=0
+):
+    return turn_service.SharkTurnState(
         connections={},
         turn_order=agent_names,
         current_turn_index=index,
@@ -43,24 +47,31 @@ def _fake_turn_state(room_name, agent_names, entrepreneur_identity="founder-x", 
 
 # ── /session-token ──────────────────────────────────────────────────────────
 
+
 def test_token_with_agents_creates_room_and_connects_all(monkeypatch):
     monkeypatch.setenv("LIVEKIT_API_KEY", "key")
     monkeypatch.setenv("LIVEKIT_API_SECRET", "secret")
     monkeypatch.setenv("LIVEKIT_URL", "wss://example.livekit.cloud")
 
     fake_lkapi = FakeLiveKitAPI()
-    monkeypatch.setattr(backend_api.api, "LiveKitAPI", lambda *a, **kw: fake_lkapi)
+    monkeypatch.setattr(
+        "backend.controllers.session_controller.api.LiveKitAPI",
+        lambda *a, **kw: fake_lkapi,
+    )
 
     connected_calls = []
 
     async def fake_join(**kwargs):
         connected_calls.append(kwargs)
-        backend_api.TURN_STATES[kwargs["room_name"]] = _fake_turn_state(
+        turn_service.TURN_STATES[kwargs["room_name"]] = _fake_turn_state(
             kwargs["room_name"], kwargs["agent_names"], kwargs["entrepreneur_identity"]
         )
         return sorted(kwargs["agent_names"])
 
-    monkeypatch.setattr(backend_api, "_join_agents_manually", fake_join)
+    monkeypatch.setattr(livekit_service, "join_agents_manually", fake_join)
+    monkeypatch.setattr(
+        "backend.controllers.session_controller.join_agents_manually", fake_join
+    )
 
     client = TestClient(backend_api.app)
     resp = client.post(
@@ -95,15 +106,21 @@ def test_token_with_agents_is_idempotent_when_room_exists(monkeypatch):
     monkeypatch.setenv("LIVEKIT_URL", "wss://example.livekit.cloud")
 
     fake_lkapi = FakeLiveKitAPI(existing_room_names={"arena-2"})
-    monkeypatch.setattr(backend_api.api, "LiveKitAPI", lambda *a, **kw: fake_lkapi)
+    monkeypatch.setattr(
+        "backend.controllers.session_controller.api.LiveKitAPI",
+        lambda *a, **kw: fake_lkapi,
+    )
 
     async def fake_join(**kwargs):
-        backend_api.TURN_STATES[kwargs["room_name"]] = _fake_turn_state(
+        turn_service.TURN_STATES[kwargs["room_name"]] = _fake_turn_state(
             kwargs["room_name"], kwargs["agent_names"], kwargs["entrepreneur_identity"]
         )
         return sorted(kwargs["agent_names"])
 
-    monkeypatch.setattr(backend_api, "_join_agents_manually", fake_join)
+    monkeypatch.setattr(livekit_service, "join_agents_manually", fake_join)
+    monkeypatch.setattr(
+        "backend.controllers.session_controller.join_agents_manually", fake_join
+    )
 
     client = TestClient(backend_api.app)
     resp = client.post(
@@ -136,6 +153,7 @@ def test_token_with_agents_requires_credentials(monkeypatch):
 
 # ── SharkAgent turn counting ────────────────────────────────────────────────
 
+
 def test_shark_agent_counts_user_messages_and_fires_handoff(monkeypatch):
     """SharkAgent fires on_turn_complete after MAX_EXCHANGES_PER_SHARK user messages."""
     import asyncio
@@ -147,11 +165,16 @@ def test_shark_agent_counts_user_messages_and_fires_handoff(monkeypatch):
 
     # Patch generate_reply so on_enter / _do_handoff don't actually call the LLM
     class FakeSession:
-        def on(self, *a, **kw): pass
-        def off(self, *a, **kw): pass
-        async def generate_reply(self, **kwargs): pass
+        def on(self, *a, **kw):
+            pass
 
-    agent = backend_api.SharkAgent("Mark", "instructions", fake_handoff)
+        def off(self, *a, **kw):
+            pass
+
+        async def generate_reply(self, **kwargs):
+            pass
+
+    agent = shark_service.SharkAgent("Mark", "instructions", fake_handoff)
     # Inject a fake session so on_enter / _on_conversation_item work without real infra
     agent._session = FakeSession()
 
@@ -162,7 +185,7 @@ def test_shark_agent_counts_user_messages_and_fires_handoff(monkeypatch):
     class FakeEv:
         item = FakeItem()
 
-    original_max = backend_api.MAX_EXCHANGES_PER_SHARK
+    original_max = MAX_EXCHANGES_PER_SHARK
 
     async def run():
         # Trigger one fewer than the limit — should NOT fire handoff
@@ -181,20 +204,19 @@ def test_shark_agent_counts_user_messages_and_fires_handoff(monkeypatch):
 
 def test_shark_agent_ignores_assistant_messages(monkeypatch):
     """SharkAgent should NOT count assistant (shark) messages toward the limit."""
-    import asyncio
 
     handoff_called = []
 
     async def fake_handoff():
         handoff_called.append(True)
 
-    agent = backend_api.SharkAgent("Kevin", "instructions", fake_handoff)
+    agent = shark_service.SharkAgent("Kevin", "instructions", fake_handoff)
 
     class FakeAssistantEv:
         class item:
             role = "assistant"
 
-    for _ in range(backend_api.MAX_EXCHANGES_PER_SHARK + 5):
+    for _ in range(MAX_EXCHANGES_PER_SHARK + 5):
         agent._on_conversation_item(FakeAssistantEv())
 
     assert not handoff_called
@@ -202,6 +224,7 @@ def test_shark_agent_ignores_assistant_messages(monkeypatch):
 
 
 # ── /advance-turn (manual override) ────────────────────────────────────────
+
 
 def test_advance_turn_cycles_to_next_shark(monkeypatch):
     close_called = []
@@ -211,12 +234,12 @@ def test_advance_turn_cycles_to_next_shark(monkeypatch):
             close_called.append(True)
 
     room_name = "arena-turn"
-    kevin_conn = backend_api.SharkRoomConnection(
+    kevin_conn = livekit_service.SharkRoomConnection(
         room=None,
         agent_name="Kevin",
-        config=backend_api.AGENT_CONFIGS["Kevin"],
+        config=AGENT_CONFIGS["Kevin"],
     )
-    state = backend_api.SharkTurnState(
+    state = turn_service.SharkTurnState(
         connections={"Mark": None, "Kevin": kevin_conn, "Lori": None},
         turn_order=["Mark", "Kevin", "Lori"],
         current_turn_index=0,
@@ -224,7 +247,7 @@ def test_advance_turn_cycles_to_next_shark(monkeypatch):
         room_name=room_name,
         entrepreneur_identity="founder-x",
     )
-    backend_api.TURN_STATES[room_name] = state
+    turn_service.TURN_STATES[room_name] = state
 
     started = []
 
@@ -233,15 +256,20 @@ def test_advance_turn_cycles_to_next_shark(monkeypatch):
         return FakeSession()
 
     async def fake_advance(s):
-        # Simplified version of _advance_turn_for_room for test isolation
+        # Simplified version of advance_turn_for_room for test isolation
         async with s.advance_lock:
             await s.active_session.aclose()
             s.active_session = None
             s.current_turn_index = (s.current_turn_index + 1) % len(s.turn_order)
             next_conn = s.connections[s.current_shark]
-            s.active_session = await fake_start(next_conn, "key", s.entrepreneur_identity, s)
+            s.active_session = await fake_start(
+                next_conn, "key", s.entrepreneur_identity, s
+            )
 
-    monkeypatch.setattr(backend_api, "_advance_turn_for_room", fake_advance)
+    monkeypatch.setattr(turn_service, "advance_turn_for_room", fake_advance)
+    monkeypatch.setattr(
+        "backend.controllers.turn_controller.advance_turn_for_room", fake_advance
+    )
     monkeypatch.setenv("GOOGLE_API_KEY", "fake-key")
 
     client = TestClient(backend_api.app)
@@ -263,10 +291,10 @@ def test_advance_turn_wraps_to_first_shark(monkeypatch):
             close_called.append(True)
 
     room_name = "arena-wrap"
-    mark_conn = backend_api.SharkRoomConnection(
-        room=None, agent_name="Mark", config=backend_api.AGENT_CONFIGS["Mark"]
+    mark_conn = livekit_service.SharkRoomConnection(
+        room=None, agent_name="Mark", config=AGENT_CONFIGS["Mark"]
     )
-    state = backend_api.SharkTurnState(
+    state = turn_service.SharkTurnState(
         connections={"Mark": mark_conn, "Kevin": None, "Lori": None},
         turn_order=["Mark", "Kevin", "Lori"],
         current_turn_index=2,
@@ -274,7 +302,7 @@ def test_advance_turn_wraps_to_first_shark(monkeypatch):
         room_name=room_name,
         entrepreneur_identity="founder-wrap",
     )
-    backend_api.TURN_STATES[room_name] = state
+    turn_service.TURN_STATES[room_name] = state
 
     async def fake_advance(s):
         async with s.advance_lock:
@@ -283,7 +311,10 @@ def test_advance_turn_wraps_to_first_shark(monkeypatch):
             s.current_turn_index = (s.current_turn_index + 1) % len(s.turn_order)
             s.active_session = FakeSession()
 
-    monkeypatch.setattr(backend_api, "_advance_turn_for_room", fake_advance)
+    monkeypatch.setattr(turn_service, "advance_turn_for_room", fake_advance)
+    monkeypatch.setattr(
+        "backend.controllers.turn_controller.advance_turn_for_room", fake_advance
+    )
     monkeypatch.setenv("GOOGLE_API_KEY", "fake-key")
 
     client = TestClient(backend_api.app)
@@ -302,9 +333,10 @@ def test_advance_turn_404_for_unknown_room():
 
 # ── /turn-status ─────────────────────────────────────────────────────────────
 
+
 def test_turn_status_returns_current_state():
     room_name = "arena-status"
-    state = backend_api.SharkTurnState(
+    state = turn_service.SharkTurnState(
         connections={},
         turn_order=["Mark", "Kevin", "Lori"],
         current_turn_index=1,
@@ -312,7 +344,7 @@ def test_turn_status_returns_current_state():
         room_name=room_name,
         entrepreneur_identity="founder-y",
     )
-    backend_api.TURN_STATES[room_name] = state
+    turn_service.TURN_STATES[room_name] = state
 
     client = TestClient(backend_api.app)
     resp = client.get(f"/turn-status?room_name={room_name}")
