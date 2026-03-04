@@ -8,21 +8,34 @@ import {
 import { SharkCard } from './components/SharkCard';
 import { Trophy, Send, Users } from 'lucide-react';
 
-const ENV = "DEV"
+const ENV = "PRODUCTION"
 const BACKEND_URL = ENV === "PRODUCTION"
     ? 'https://ai-shark-tank.onrender.com'
     : 'http://localhost:8000';
+const ACCESS_PASSWORD = 'tank@321';
 
 export default function App() {
     const [token, setToken] = useState<string | null>(null);
     const [serverUrl, setServerUrl] = useState<string | null>(null);
     const [roomName, setRoomName] = useState('shark-arena');
     const [identity, setIdentity] = useState('');
+    const [password, setPassword] = useState('');
     const [isJoining, setIsJoining] = useState(false);
 
     const handleJoin = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!roomName || !identity) return;
+
+        if (!password) {
+            alert('Please enter the access password.');
+            return;
+        }
+
+        if (password !== ACCESS_PASSWORD) {
+            alert('Incorrect password. Access denied.');
+            return;
+        }
+
         setIsJoining(true);
 
         try {
@@ -86,6 +99,17 @@ export default function App() {
                                 type="text"
                                 value={roomName}
                                 onChange={(e) => setRoomName(e.target.value)}
+                                className="glass-input"
+                                required
+                            />
+                        </div>
+                        <div className="space-y-4">
+                            <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Access Password</label>
+                            <input
+                                type="password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                placeholder="Enter access password"
                                 className="glass-input"
                                 required
                             />
