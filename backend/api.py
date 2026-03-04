@@ -25,7 +25,7 @@ app.add_middleware(
 )
 
 # How many entrepreneur messages each shark gets before passing to the next
-MAX_EXCHANGES_PER_SHARK = 3
+MAX_EXCHANGES_PER_SHARK = 2
 
 
 class TokenRequest(BaseModel):
@@ -76,9 +76,60 @@ AGENT_CONFIGS = {
 AGENT_JOIN_LOCK = asyncio.Lock()
 
 
+def _extract_messages(chat_ctx, start_idx: int = 0) -> str:
+    """Format chat_ctx messages[start_idx:] into a labelled transcript block."""
+    if chat_ctx is None:
+        return ""
+    messages_fn = getattr(chat_ctx, "messages", None)
+    all_messages = messages_fn() if callable(messages_fn) else (messages_fn or [])
+    messages = all_messages[start_idx:]
+    lines = []
+    for msg in messages:
+        role = getattr(msg, "role", None)
+        role_str = role.value if hasattr(role, "value") else str(role)
+        if role_str == "system":
+            continue
+        content = getattr(msg, "content", "")
+        if isinstance(content, list):
+            text = " ".join(getattr(part, "text", str(part)) for part in content)
+        else:
+            text = str(content) if content else ""
+        text = text.strip()
+        if not text:
+            continue
+        label = "Entrepreneur" if role_str == "user" else "Shark"
+        lines.append(f"  {label}: {text}")
+    return "\n".join(lines)
+
+
+def _build_turn_summary(shark_name: str, chat_ctx, start_idx: int) -> str:
+    """Compress a single shark's turn into a short labelled block."""
+    body = _extract_messages(chat_ctx, start_idx)
+    if not body:
+        return ""
+    return f"[{shark_name}]\n{body}"
+
+
+def _build_shark_instructions(config: dict, turn_state: "SharkTurnState") -> str:
+    """Build system instructions with live context and compressed prior-turn summaries."""
+    base = config["instructions"]
+    live_notice = "You are LIVE right now on Shark Tank."
+    if not turn_state.turn_summaries:
+        return f"{live_notice} {base}"
+    history = "\n\n".join(turn_state.turn_summaries)
+    return (
+        f"{live_notice} {base}\n\n"
+        f"Pitch conversation so far (one block per shark turn):\n"
+        f"---\n{history}\n---\n\n"
+        f"You have been sitting on the panel listening to everything above. "
+        f"Introduce yourself and probe an angle the previous sharks have not yet covered."
+    )
+
+
 @dataclass
 class SharkRoomConnection:
     """A persistent room connection for a single shark identity."""
+
     room: rtc.Room
     agent_name: str
     config: dict
@@ -87,12 +138,18 @@ class SharkRoomConnection:
 @dataclass
 class SharkTurnState:
     """All runtime state for a single pitch room."""
+
     connections: Dict[str, SharkRoomConnection]
     turn_order: List[str]
     current_turn_index: int
     active_session: Optional[AgentSession]
     room_name: str
     entrepreneur_identity: str
+    chat_ctx: object = None
+    # One compressed summary entry per completed shark turn; grows slowly
+    turn_summaries: List[str] = field(default_factory=list)
+    # Message count at the start of the current turn (for delta extraction)
+    turn_start_msg_count: int = 0
     advance_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
     @property
@@ -114,26 +171,44 @@ class SharkAgent(Agent):
         name: str,
         instructions: str,
         on_turn_complete: Callable[[], Coroutine],
+        turn_state: "SharkTurnState",
+        chat_ctx=None,
     ):
-        super().__init__(instructions=instructions)
+        super().__init__(instructions=instructions, chat_ctx=chat_ctx)
         self._name = name
         self._on_turn_complete = on_turn_complete
+        self._turn_state = turn_state
         self._user_msg_count = 0
         self._handoff_triggered = False
 
     async def on_enter(self) -> None:
         self.session.on("conversation_item_added", self._on_conversation_item)
-        await self.session.generate_reply(
-            instructions=(
-                "Introduce yourself as this shark and ask the entrepreneur "
-                "their first key business question."
+        has_prior = bool(self._turn_state.turn_summaries)
+        if has_prior:
+            await self.session.generate_reply(
+                instructions=(
+                    f"You are {self._name} and you are LIVE on Shark Tank right now. "
+                    "You have been listening to this entrepreneur's pitch. "
+                    "Introduce yourself briefly, then ask a sharp follow-up question "
+                    "that digs into an angle the previous sharks have not yet explored."
+                )
             )
-        )
+        else:
+            await self.session.generate_reply(
+                instructions=(
+                    f"You are {self._name} and you are LIVE on Shark Tank right now. "
+                    "Welcome the entrepreneur to the Tank, introduce yourself, "
+                    "and ask your first key question about their business."
+                )
+            )
 
     async def on_exit(self) -> None:
+        self._turn_state.chat_ctx = self.chat_ctx
         self.session.off("conversation_item_added", self._on_conversation_item)
 
     def _on_conversation_item(self, ev) -> None:
+        # Always keep shared state's chat_ctx updated
+        self._turn_state.chat_ctx = self.chat_ctx
         if self._handoff_triggered:
             return
         # Only count final user (entrepreneur) messages
@@ -149,7 +224,7 @@ class SharkAgent(Agent):
                 asyncio.create_task(self._do_handoff())
 
     async def _do_handoff(self) -> None:
-        """Generate a farewell, then signal the turn manager to advance."""
+        """Generate a farewell, compress this turn into a summary, then advance."""
         print(f"[Turn] {self._name} wrapping up, handing off...")
         await self.session.generate_reply(
             instructions=(
@@ -157,6 +232,15 @@ class SharkAgent(Agent):
                 "Tell the entrepreneur you're passing them to your fellow shark."
             )
         )
+        # Save full context so next shark's Agent has the raw history
+        self._turn_state.chat_ctx = self.chat_ctx
+        # Compress this turn into a summary block (only the delta since turn start)
+        summary = _build_turn_summary(
+            self._name, self.chat_ctx, self._turn_state.turn_start_msg_count
+        )
+        if summary:
+            self._turn_state.turn_summaries.append(summary)
+            print(f"[Turn] Saved summary for {self._name} ({len(summary)} chars)")
         await self._on_turn_complete()
 
 
@@ -173,9 +257,9 @@ def _get_livekit_credentials() -> Tuple[str, str, str]:
 
 def _normalize_ws_url(url: str) -> str:
     if url.startswith("https://"):
-        return "wss://" + url[len("https://"):]
+        return "wss://" + url[len("https://") :]
     if url.startswith("http://"):
-        return "ws://" + url[len("http://"):]
+        return "ws://" + url[len("http://") :]
     return url
 
 
@@ -276,6 +360,8 @@ async def _start_shark_session(
 ) -> AgentSession:
     """Start an AgentSession for the given shark. Wires up the turn-complete callback."""
     config = connection.config
+    # Build instructions that include Shark Tank context and any prior conversation
+    instructions = _build_shark_instructions(config, turn_state)
 
     async def on_turn_complete() -> None:
         await _advance_turn_for_room(turn_state)
@@ -285,12 +371,26 @@ async def _start_shark_session(
             api_key=google_api_key,
             voice=config["voice"],
             temperature=config["temperature"],
-            instructions=config["instructions"],
+            instructions=instructions,
         )
     )
+    # Snapshot message count so _do_handoff knows which messages belong to this turn
+    if turn_state.chat_ctx is not None:
+        messages_fn = getattr(turn_state.chat_ctx, "messages", None)
+        prior_msgs = messages_fn() if callable(messages_fn) else (messages_fn or [])
+    else:
+        prior_msgs = []
+    turn_state.turn_start_msg_count = len(prior_msgs)
+
     await session.start(
         room=connection.room,
-        agent=SharkAgent(connection.agent_name, config["instructions"], on_turn_complete),
+        agent=SharkAgent(
+            connection.agent_name,
+            instructions,
+            on_turn_complete,
+            turn_state,
+            chat_ctx=turn_state.chat_ctx,
+        ),
         room_options=room_io.RoomOptions(
             participant_identity=entrepreneur_identity,
             close_on_disconnect=False,
@@ -321,7 +421,9 @@ async def _advance_turn_for_room(state: SharkTurnState) -> None:
                     {"shark.active": "false"}
                 )
             except Exception as e:
-                print(f"[Turn] Warning: could not clear shark.active for {state.current_shark}: {e}")
+                print(
+                    f"[Turn] Warning: could not clear shark.active for {state.current_shark}: {e}"
+                )
 
         # Close the outgoing session
         if state.active_session is not None:
@@ -330,7 +432,9 @@ async def _advance_turn_for_room(state: SharkTurnState) -> None:
             state.active_session = None
 
         # Advance turn index
-        state.current_turn_index = (state.current_turn_index + 1) % len(state.turn_order)
+        state.current_turn_index = (state.current_turn_index + 1) % len(
+            state.turn_order
+        )
         print(f"[Turn] It is now {state.current_shark}'s turn")
 
         # Start the new session
@@ -364,8 +468,7 @@ async def _join_agents_manually(
         existing_state = TURN_STATES.get(room_name)
         if existing_state:
             all_connected = all(
-                conn.room.isconnected()
-                for conn in existing_state.connections.values()
+                conn.room.isconnected() for conn in existing_state.connections.values()
             )
             if all_connected:
                 return sorted(existing_state.connections.keys())
