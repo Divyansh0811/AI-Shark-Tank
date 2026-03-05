@@ -2,6 +2,11 @@
 
 **Shark Tank AI** is a real-time voice experience where founders pitch to a rotating AI panel of Mark, Kevin, and Lori. The app uses LiveKit + Google realtime models for low-latency conversation and a turn-based panel flow.
 
+1. Join a room
+<img width="1424" height="897" alt="image" src="https://github.com/user-attachments/assets/fa4b12b1-6061-4d03-bc1f-b4daa704ef83" />
+2. Pitch.
+<img width="1440" height="782" alt="image" src="https://github.com/user-attachments/assets/d272807f-20d5-4010-ad3b-1a1ee0404138" />
+
 ---
 
 ## 🚀 Key Features
