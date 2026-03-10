@@ -1,0 +1,31 @@
+services:
+  shark-tank-backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: shark-tank-backend
+    restart: unless-stopped
+    env_file:
+      - backend/.env
+    expose:
+      - "8000"
+
+  shark-tank-caddy:
+    image: caddy:2
+    container_name: shark-tank-caddy
+    restart: unless-stopped
+    depends_on:
+      - shark-tank-backend
+    environment:
+      - BACKEND_DOMAIN=${BACKEND_DOMAIN:-api.example.com}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

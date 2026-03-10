@@ -8,10 +8,7 @@ import {
 import { SharkCard } from './components/SharkCard';
 import { Trophy, Send, Users } from 'lucide-react';
 
-const ENV = "PRODUCTION"
-const BACKEND_URL = ENV === "PRODUCTION"
-    ? 'https://ai-shark-tank.onrender.com'
-    : 'http://localhost:8000';
+const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:8000').trim();
 const ACCESS_PASSWORD = (import.meta.env.VITE_ACCESS_PASSWORD ?? '').trim();
 
 export default function App() {
