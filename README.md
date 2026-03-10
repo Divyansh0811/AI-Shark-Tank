@@ -61,7 +61,7 @@ frontend/
 
 ### 2) Backend env
 
-Create `backend/.env`:
+Create `backend/.env` (you can copy from `backend/.env.example`):
 
 ```env
 LIVEKIT_URL=wss://your-project.livekit.cloud
@@ -78,9 +78,10 @@ uv run uvicorn backend.api:app --reload --port 8000
 
 ### 4) Run frontend
 
-Create `frontend/.env.local`:
+Create `frontend/.env.local` (you can copy from `frontend/.env.example`):
 
 ```env
+VITE_BACKEND_URL=http://localhost:8000
 VITE_ACCESS_PASSWORD=your-access-password
 ```
 
@@ -88,6 +89,53 @@ VITE_ACCESS_PASSWORD=your-access-password
 npm install --prefix frontend
 npm run dev --prefix frontend
 ```
+
+### 5) Deploy backend with Docker + reverse proxy (custom server)
+
+This repo includes:
+
+- `backend/Dockerfile` for FastAPI backend
+- `docker-compose.backend.yml` for backend + Caddy reverse proxy
+- `Caddyfile` for routing and automatic TLS (Let's Encrypt)
+
+1. On your server, clone/pull this repo.
+2. Create `backend/.env` with production secrets (copy from `backend/.env.example`).
+3. Start services:
+
+```bash
+sudo BACKEND_DOMAIN=api.example.com docker compose -f docker-compose.backend.yml up -d --build
+```
+
+4. Check status/logs:
+
+```bash
+sudo docker compose -f docker-compose.backend.yml ps
+sudo docker compose -f docker-compose.backend.yml logs -f
+```
+
+5. Verify API:
+
+```bash
+curl -I https://api.example.com/docs
+```
+
+Notes:
+
+- `shark-tank-caddy` is the only public entrypoint (`80/443`).
+- `shark-tank-backend` is internal-only (`expose: 8000`).
+- For your own domain later, point DNS to server IP and set `BACKEND_DOMAIN=api.yourdomain.com`.
+- Caddy renews certificates automatically.
+
+### 6) Frontend (Vercel) env
+
+In Vercel, set:
+
+```env
+VITE_BACKEND_URL=https://api.example.com
+VITE_ACCESS_PASSWORD=your-access-password
+```
+
+Then redeploy the frontend.
 
 ---
 
